@@ -1,0 +1,38 @@
+plugins {
+    id 'java'
+}
+
+group = 'org.example'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    implementation('org.postgresql:postgresql:42.5.0')
+}
+
+jar {
+    manifest {
+        attributes(
+                'Main-Class': 'vacancy_manager.Main', // Полное имя класса с пакетом
+                'Class-Path': configurations.runtimeClasspath.collect { it.getName() }.join(' ')
+        )
+    }
+
+    // Собираем fat-jar со всеми зависимостями
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    } {
+        exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE // Стратегия обработки дубликатов
+}
+
+test {
+    useJUnitPlatform()
+}
