@@ -17,13 +17,12 @@ CREATE TABLE "user"
 
 CREATE TABLE manager
 (
-    id         SERIAL PRIMARY KEY,           -- Уникальный идентификатор менеджера
+    id INT PRIMARY KEY REFERENCES "user" (id) ON DELETE SET NULL,                          -- Уникальный идентификатор менеджера
     first_name VARCHAR(100)        NOT NULL, -- Имя менеджера
     last_name  VARCHAR(100)        NOT NULL, -- Фамилия менеджера
     patronymic VARCHAR(100)        NOT NULL,
     email      VARCHAR(255) UNIQUE NOT NULL, -- Электронная почта менеджера
-    phone      VARCHAR(20),                  -- Телефон менеджера
-    user_id    INT REFERENCES "user" (id) ON DELETE CASCADE
+    phone VARCHAR(20)                        -- Телефон менеджера
 );
 
 CREATE TABLE vacancy
@@ -49,27 +48,29 @@ CREATE TABLE candidate
 
 
 
-INSERT INTO "user" (role, password, login)
-VALUES
-    ('admin', 'admin123', 'admin'),
-    ('manager', 'manager123', 'manager1'),
-    ('manager', 'manager123', 'manager2'),
-    ('manager', 'manager123', 'manager3'),
-    ('manager', 'manager123', 'manager4');
+INSERT INTO "user" (id, role, password, login)
+VALUES (1, 'admin', 'admin123', 'admin'),
+       (2, 'manager', 'manager123', 'manager1'),
+       (3, 'manager', 'manager123', 'manager2'),
+       (4, 'manager', 'manager123', 'manager3'),
+       (5, 'manager', 'manager123', 'manager4');
 
-INSERT INTO manager (first_name, last_name, patronymic, email, phone, user_id)
-VALUES ('Иван', 'Иванов', 'Иванович', 'ivanov@example.com', '+7 (900) 123-45-67', 2),
-       ('Мария', 'Петрова', 'Петровна', 'petrova@example.com', '+7 (900) 234-56-78', 3),
-       ('Алексей', 'Сидоров', 'Алексеевич', 'sidorov@example.com', '+7 (900) 345-67-89', 4),
-       ('Екатерина', 'Михайлова', 'Викторовна', 'mihailova@example.com', '+7 (900) 456-78-90', 5);
+ALTER SEQUENCE user_id_seq RESTART WITH 6;
+
+
+INSERT INTO manager (id, first_name, last_name, patronymic, email, phone)
+VALUES (2, 'Иван', 'Иванов', 'Иванович', 'ivanov@example.com', '+7 (900) 123-45-67'),
+       (3, 'Мария', 'Петрова', 'Петровна', 'petrova@example.com', '+7 (900) 234-56-78'),
+       (4, 'Алексей', 'Сидоров', 'Алексеевич', 'sidorov@example.com', '+7 (900) 345-67-89'),
+       (5, 'Екатерина', 'Михайлова', 'Викторовна', 'mihailova@example.com', '+7 (900) 456-78-90');
 
 -- Вставка данных в таблицу vacancy
 INSERT INTO vacancy (title, description, salary, manager_id)
 VALUES ('Менеджер по продажам', 'Поиск и привлечение новых клиентов, ведение переговоров, заключение контрактов.',
-        50000.00, 1),
+        50000.00, 2),
        ('Системный администратор',
-        'Настройка и обслуживание серверного оборудования, настройка сетевой инфраструктуры.', 60000.00, 2),
-       ('Маркетолог', 'Разработка и внедрение маркетинговых стратегий, анализ рынка и конкурентов.', 70000.00, 3),
+        'Настройка и обслуживание серверного оборудования, настройка сетевой инфраструктуры.', 60000.00, 3),
+       ('Маркетолог', 'Разработка и внедрение маркетинговых стратегий, анализ рынка и конкурентов.', 70000.00, 4),
        ('HR-менеджер', 'Подбор персонала, проведение собеседований, участие в разработке внутренней политики компании.',
         55000.00, 4);
 

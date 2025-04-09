@@ -16,22 +16,30 @@ public class ManagerRepo extends UnicastRemoteObject implements vacancy_manager.
 
     public List<Manager> getAll() {
         List<Manager> managers = new ArrayList<>();
-        String query = "SELECT * FROM manager";
+        String query = "SELECT m.*, u.login, u.password " +
+                "FROM manager m " +
+                "JOIN \"user\" u ON m.id = u.id " +
+                "WHERE u.role = CAST(? AS user_role)";
 
         try (Connection connection = DbManager.getConnection();
-             Statement statement = connection.createStatement();
-             ResultSet resultSet = statement.executeQuery(query)) {
+             PreparedStatement statement = connection.prepareStatement(query)) {
 
-            while (resultSet.next()) {
-                int id = resultSet.getInt("id");
-                String firstName = resultSet.getString("first_name");
-                String lastName = resultSet.getString("last_name");
-                String patronymic = resultSet.getString("patronymic");
-                String email = resultSet.getString("email");
-                String phone = resultSet.getString("phone");
+            statement.setString(1, "manager");
 
-                Manager manager = new Manager(id, firstName, lastName, patronymic, email, phone);
-                managers.add(manager);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    Manager manager = new Manager(
+                            resultSet.getInt("id"),
+                            resultSet.getString("first_name"),
+                            resultSet.getString("last_name"),
+                            resultSet.getString("patronymic"),
+                            resultSet.getString("email"),
+                            resultSet.getString("phone"),
+                            resultSet.getString("login"),
+                            resultSet.getString("password")
+                    );
+                    managers.add(manager);
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -41,60 +49,117 @@ public class ManagerRepo extends UnicastRemoteObject implements vacancy_manager.
     }
 
     public int addManager(Manager manager) {
-        String query = "INSERT INTO \"user\" (role) VALUES ('manager') RETURNING id";
-        try (Connection connection = DbManager.getConnection();
-             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+        Connection connection = null;
+        int generatedId = -1;
 
-            try (ResultSet resultSet = preparedStatement.executeQuery()) {
-                if (resultSet.next()) {
-                   manager.setUserId(resultSet.getInt("id"));
+        try {
+            connection = DbManager.getConnection();
+            connection.setAutoCommit(false); // Начало транзакции
+
+            // Первый запрос - добавление пользователя
+            String userQuery = "INSERT INTO \"user\" (role, login, password) VALUES ('manager', ?, ?) RETURNING id";
+            try (PreparedStatement userStatement = connection.prepareStatement(userQuery)) {
+                userStatement.setString(1, manager.getLogin());
+                userStatement.setString(2, manager.getPassword()); // Исправлено: было setString(1, ...)
+
+                try (ResultSet resultSet = userStatement.executeQuery()) {
+                    if (resultSet.next()) {
+                        manager.setId(resultSet.getInt("id"));
+                    }
                 }
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
 
-         query = "INSERT INTO manager (first_name, last_name, patronymic, email, phone, user_id) VALUES (?, ?, ?, ?, ?,?) RETURNING id";
-        int generatedId = -1;  // Значение по умолчанию, если что-то пойдет не так
+            // Второй запрос - добавление менеджера
+            String managerQuery = "INSERT INTO manager (id, first_name, last_name, patronymic, email, phone) VALUES (?, ?, ?, ?, ?, ?) RETURNING id";
+            try (PreparedStatement managerStatement = connection.prepareStatement(managerQuery)) {
+                managerStatement.setInt(1, manager.getId());
+                managerStatement.setString(2, manager.getFirstName());
+                managerStatement.setString(3, manager.getLastName());
+                managerStatement.setString(4, manager.getPatronymic());
+                managerStatement.setString(5, manager.getEmail());
+                managerStatement.setString(6, manager.getPhone());
 
-        try (Connection connection = DbManager.getConnection();
-             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
-
-            preparedStatement.setString(1, manager.getFirstName());
-            preparedStatement.setString(2, manager.getLastName());
-            preparedStatement.setString(3, manager.getPatronymic());
-            preparedStatement.setString(4, manager.getEmail());
-            preparedStatement.setString(5, manager.getPhone());
-            preparedStatement.setInt(6, manager.getUserId());
-
-            try (ResultSet resultSet = preparedStatement.executeQuery()) {
-                if (resultSet.next()) {
-                    generatedId = resultSet.getInt("id");
+                try (ResultSet resultSet = managerStatement.executeQuery()) {
+                    if (resultSet.next()) {
+                        generatedId = resultSet.getInt("id");
+                    }
                 }
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
 
-        return generatedId;
+            connection.commit(); // Подтверждение транзакции
+            return generatedId;
+
+        } catch (SQLException e) {
+            try {
+                if (connection != null) {
+                    connection.rollback(); // Откат при ошибке
+                }
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
+            e.printStackTrace();
+            return -1;
+        } finally {
+            try {
+                if (connection != null) {
+                    connection.setAutoCommit(true); // Восстановление авто-коммита
+                    connection.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public void updateManager(Manager manager) {
-        String query = "UPDATE manager SET first_name = ?, last_name = ?, patronymic = ?, email = ?, phone = ? WHERE id = ?";
+        Connection connection = null;
+        try {
+            connection = DbManager.getConnection();
+            // Start transaction
+            connection.setAutoCommit(false);
 
-        try (Connection connection = DbManager.getConnection();
-             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+            // First query - update user credentials
+            String userQuery = "UPDATE \"user\" SET login = ?, password = ? WHERE id = ?";
+            try (PreparedStatement userStatement = connection.prepareStatement(userQuery)) {
+                userStatement.setString(1, manager.getLogin());
+                userStatement.setString(2, manager.getPassword());
+                userStatement.setInt(3, manager.getId());
+                userStatement.executeUpdate();
+            }
 
-            preparedStatement.setString(1, manager.getFirstName());
-            preparedStatement.setString(2, manager.getLastName());
-            preparedStatement.setString(3, manager.getPatronymic());
-            preparedStatement.setString(4, manager.getEmail());
-            preparedStatement.setString(5, manager.getPhone());
-            preparedStatement.setInt(6, manager.getId());
+            // Second query - update manager details
+            String managerQuery = "UPDATE manager SET first_name = ?, last_name = ?, patronymic = ?, email = ?, phone = ? WHERE id = ?";
+            try (PreparedStatement managerStatement = connection.prepareStatement(managerQuery)) {
+                managerStatement.setString(1, manager.getFirstName());
+                managerStatement.setString(2, manager.getLastName());
+                managerStatement.setString(3, manager.getPatronymic());
+                managerStatement.setString(4, manager.getEmail());
+                managerStatement.setString(5, manager.getPhone());
+                managerStatement.setInt(6, manager.getId());
+                managerStatement.executeUpdate();
+            }
 
-            preparedStatement.executeUpdate();
+            // Commit transaction
+            connection.commit();
         } catch (SQLException e) {
+            // Rollback transaction if any error occurs
+            try {
+                if (connection != null) {
+                    connection.rollback();
+                }
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
             e.printStackTrace();
+        } finally {
+            try {
+                if (connection != null) {
+                    connection.setAutoCommit(true); // Reset auto-commit
+                    connection.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 
