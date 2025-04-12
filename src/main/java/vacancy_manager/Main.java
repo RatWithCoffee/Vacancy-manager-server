@@ -22,6 +22,8 @@ public class Main {
             registry.bind("ManagerRepo", managerRepo);
             registry.bind("CandidateRepo", candidateRepo);
             registry.bind("LoginRepo", loginRepo);
+
+            System.out.println("server started");
         } catch (Exception e) {
             e.printStackTrace();
         }
